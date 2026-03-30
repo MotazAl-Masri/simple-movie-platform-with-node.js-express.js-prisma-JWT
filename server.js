@@ -20,12 +20,6 @@ app.use(express.urlencoded({ extended: true }));
 app.use("/api/movies", movieRouter);
 app.use("/api/auth", authRouter);
 app.use("/api/watchlist", watchlistRouter);
-app.get("/", (req, res) => {
-  res.json({
-    message: "Hello, World!",
-    status: "200 OK",
-  });
-});
 
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
