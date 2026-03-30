@@ -5,6 +5,14 @@ const { generateToken } = require("../utlis/generateToken.js");
 
 const registerUser = async (req, res) => {
   const { name, email, password } = req.body;
+
+  const { error } = validateUserRegistration({ name, email, password });
+  if (error) {
+    return res.status(400).json({
+      message: error.details[0].message,
+    });
+  }
+
   //check if user already exists
   const existingUser = await db.user.findUnique({
     where: {
@@ -46,6 +54,25 @@ const registerUser = async (req, res) => {
 
 const loginUser = async (req, res) => {
   const { email, password } = req.body;
+
+  const { error } = validateUserLogin({ email, password });
+  if (error) {
+    return res.status(400).json({
+      message: error.details[0].message,
+    });
+  }
+
+  if (!email || !password) {
+    return res.status(400).json({
+      message: "All fields are required",
+    });
+  }
+
+  if (password.length < 6) {
+    return res.status(400).json({
+      message: "Password must be at least 6 characters",
+    });
+  }
   //Check if user exists
   const user = await db.user.findUnique({
     where: {
