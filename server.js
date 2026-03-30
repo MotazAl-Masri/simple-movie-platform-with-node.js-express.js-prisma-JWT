@@ -1,5 +1,4 @@
 const express = require("express");
-const crypto = require("crypto");
 //import routes
 const movieRouter = require("./src/routes/movieRoute").router;
 const authRouter = require("./src/routes/authRoutes").router;
@@ -56,6 +55,3 @@ process.on("SIGTERM", async () => {
     process.exit(0);
   });
 });
-
-const secret = crypto.randomBytes(32).toString("base64");
-console.log("Generated Secret Key:", secret);
