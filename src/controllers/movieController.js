@@ -1,5 +1,5 @@
+const bcrypt = require("../../node_modules/bcryptjs");
 const { db } = require("../config/DB.js");
-const bcrypt = require("bcryptjs");
 
 const getAllMovies = async (req, res) => {
   try {
@@ -75,6 +75,8 @@ const addMovie = async (req, res) => {
       status: "400 Bad Request",
     });
   }
+  const salt = await bcrypt.genSalt(10);
+  const hashedUrl = await bcrypt.hash(posterUrl, salt);
   try {
     const newMovie = await db.movie.create({
       data: {
@@ -83,7 +85,7 @@ const addMovie = async (req, res) => {
         releaseYear: releaseyear,
         genres: genres,
         runtime: runtime,
-        posterUrl: posterUrl,
+        posterUrl: hashedUrl,
         anotherTitles: anotherTitles,
         directorId: directorId,
         rating: rating,
@@ -133,6 +135,9 @@ const updateMovie = async (req, res) => {
       status: "400 Bad Request",
     });
   }
+
+  const salt = await bcrypt.genSalt(10);
+  const hashedUrl = await bcrypt.hash(posterUrl, salt);
   try {
     const updatedMovie = await db.movie.update({
       where: {
@@ -144,7 +149,7 @@ const updateMovie = async (req, res) => {
         releaseYear: releaseyear,
         genres: genres,
         runtime: runtime,
-        posterUrl: posterUrl,
+        posterUrl: hashedUrl,
         anotherTitles: anotherTitles,
         directorId: directorId,
         rating: rating,
