@@ -3,6 +3,7 @@ const xss = require("xss-clean");
 const ratinglimit = require("express-rate-limit");
 const helmet = require("helmet");
 const hpp = require("hpp");
+const { connectRedis } = require("./src/config/redis.js");
 
 //error handler middleware
 const { notFound, errorHandler } = require("./src/middleware/errors");
@@ -16,7 +17,11 @@ const dotenv = require("dotenv");
 const { connectDB, disconnectDB } = require("./src/config/DB");
 
 dotenv.config();
+//connect to database
 connectDB();
+//connect to redis
+connectRedis();
+//init app
 const app = express();
 
 const PORT = process.env.PORT || 3000;
