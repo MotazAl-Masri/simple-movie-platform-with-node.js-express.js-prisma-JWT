@@ -1,9 +1,12 @@
 const express = require("express");
-const xss = require("xss-clean");
+//const xss = require("xss-clean");
 const ratinglimit = require("express-rate-limit");
-const helmet = require("helmet");
-const hpp = require("hpp");
+//const helmet = require("helmet");
+//const hpp = require("hpp");
 const { connectRedis } = require("./src/config/redis.js");
+
+//dotenv for environment variables
+const dotenv = require("dotenv");
 
 //error handler middleware
 const { notFound, errorHandler } = require("./src/middleware/errors");
@@ -12,7 +15,7 @@ const { notFound, errorHandler } = require("./src/middleware/errors");
 const movieRouter = require("./src/routes/movieRoute").router;
 const authRouter = require("./src/routes/authRoutes").router;
 const watchlistRouter = require("./src/routes/watchlistRoute").router;
-const dotenv = require("dotenv");
+const redisRoute = require("./src/routes/redisRoute.js");
 
 const { connectDB, disconnectDB } = require("./src/config/DB");
 
@@ -29,12 +32,12 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 //security middleware to set various HTTP headers for protection against common vulnerabilities
-app.use(helmet());
+//app.use(helmet());
 
 //prevent HTTP parameter pollution attacks
-app.use(hpp());
+//app.use(hpp());
 //Data sanitization against XSS attacks
-app.use(xss());
+//app.use(xss());
 //Rate limiting middleware to prevent brute-force attacks
 app.use(
   ratinglimit({
@@ -49,6 +52,7 @@ app.use(
 app.use("/api/movies", movieRouter);
 app.use("/api/auth", authRouter);
 app.use("/api/watchlist", watchlistRouter);
+app.use("/api/redis", redisRoute);
 
 // error handling middleware
 app.use(notFound);
