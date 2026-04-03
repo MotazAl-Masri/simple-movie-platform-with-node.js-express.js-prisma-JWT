@@ -1,11 +1,57 @@
 const { PrismaClient } = require("../generated/prisma");
-
+const { redisClient } = require("../config/redis.js");
 const db = new PrismaClient();
 
 const {
   validateAddToWatchlistItemInput,
   validateUpdateWatchlistItemInput,
 } = require("../models/WatchlistItem");
+
+const getWatchlist = async (req, res) => {
+  try {
+    if (!watchlistItems) {
+      return res.status(404).json({
+        message: "Watchlist not found",
+      });
+    }
+
+    const userId = req.user.id;
+    const cachKey = `watchlist:${userId}`;
+
+    const cachedData = await redisClient.get(cachKey);
+    if (cachedData) {
+      const paresedWatchlist = JSON.parse(cachedData);
+      console.log("from cache");
+
+      return res.status(200).json({
+        status: "success",
+        data: paresedWatchlist,
+        source: "cache",
+      });
+    }
+
+    const watchlistItems = await db.watchlistItem.findMany({
+      where: {
+        userId: req.user.id,
+      },
+      include: {
+        movie: true,
+      },
+    });
+
+    await redisClient.setEx(cachKey, 60, JSON.stringify(watchlistItems));
+    console.log("from database");
+    return res.status(200).json({
+      status: "success",
+      data: watchlistItems,
+      source: "database",
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: "An error occurred while retrieving the watchlist",
+    });
+  }
+};
 
 const addToWatchlist = async (req, res) => {
   const { movieId, status, rating, notes } = req.body;
@@ -49,7 +95,7 @@ const addToWatchlist = async (req, res) => {
       notes: notes,
     },
   });
-
+  await redisClient.del(`watchlist:${req.user.id}`);
   res.status(201).json({
     message: "Movie added to watchlist",
     watchlistItem,
@@ -94,6 +140,8 @@ const updateWatchlistItem = async (req, res) => {
     data: updateData,
   });
 
+  await redisClient.del(`watchlist:${req.user.id}`);
+
   res.status(200).json({
     status: "success",
     data: updatedItem,
@@ -126,6 +174,7 @@ const removeFromWatchlist = async (req, res) => {
   });
 };
 module.exports = {
+  getWatchlist,
   addToWatchlist,
   updateWatchlistItem,
   removeFromWatchlist,

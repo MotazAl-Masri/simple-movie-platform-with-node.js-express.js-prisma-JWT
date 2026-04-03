@@ -18,21 +18,26 @@ const getAllMovies = async (req, res) => {
     const cachedMovies = await redisClient.get(cachKey);
 
     if (cachedMovies) {
+      const parsedMovies = JSON.parse(cachedMovies);
       console.log("from Redis");
+
       return res.status(200).json({
-        data: JSON.parse(cachedMovies),
+        data: parsedMovies,
         message: "Movies retrieved successfully (from cache)",
         status: "200 OK",
       });
     }
-    //fetch movies from database
+
     const movies = await db.movie.findMany();
-    await redisClient.set(cachKey, 60, JSON.stringify(movies)); // Cache movies in Redis for 60 seconds
+
+    await redisClient.setEx(cachKey, 60, JSON.stringify(movies));
+
     console.log("from database");
+
     return res.status(200).json({
+      data: movies,
       message: "Movies retrieved successfully from database",
       status: "200 OK",
-      data: movies,
     });
   } catch (error) {
     console.error("Error retrieving movies:", error);
@@ -46,6 +51,21 @@ const getAllMovies = async (req, res) => {
 const getMovieById = async (req, res) => {
   const { id } = req.params;
   try {
+    const cachKey = `movie:${id}`;
+
+    // Check if movie is cached in Redis
+    const cachedMovie = await redisClient.get(cachKey);
+
+    if (cachedMovie) {
+      const paresedMovie = JSON.parse(cachedMovie);
+      console.log("from redis");
+      return res.status(200).json({
+        data: paresedMovie,
+        message: "Movie retrieved successfully (from cache)",
+        status: "200 OK",
+      });
+    }
+
     const movie = await db.movie.findUnique({
       where: {
         id: parseInt(id),
@@ -57,8 +77,10 @@ const getMovieById = async (req, res) => {
         status: "404 Not Found",
       });
     }
+    await redisClient.setEx(cachKey, 60, JSON.stringify(movie));
+    console.log("from database");
     return res.status(200).json({
-      message: "Movie retrieved successfully",
+      message: "Movie retrieved successfully from database",
       status: "200 OK",
       data: movie,
     });
@@ -116,6 +138,9 @@ const addMovie = async (req, res) => {
         rating: rating,
       },
     });
+
+    await redisClient.del("movies");
+
     return res.status(201).json({
       message: "Movie added successfully",
       status: "201 Created",
@@ -180,6 +205,10 @@ const updateMovie = async (req, res) => {
         rating: rating,
       },
     });
+
+    await redisClient.del(`movie:${id}`);
+    await redisClient.del("movies");
+
     return res.status(200).json({
       message: "Movie updated successfully",
       status: "200 OK",
@@ -209,6 +238,10 @@ const deleteMovie = async (req, res) => {
         id: parseInt(id),
       },
     });
+
+    await redisClient.del(`movie:${id}`);
+    await redisClient.del("movies");
+
     return res.status(200).json({
       message: "Movie deleted successfully",
       status: "200 OK",
