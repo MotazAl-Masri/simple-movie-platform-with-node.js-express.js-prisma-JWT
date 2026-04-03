@@ -1,11 +1,36 @@
 const bcrypt = require("../../node_modules/bcryptjs");
 const { db } = require("../config/DB.js");
+const { prismaClient } = require("../generated/prisma");
+const { redisClient } = require("../config/redis.js");
+
+const {
+  validateAddNewMovieInput,
+  validateUpdateMovieInput,
+  validateDeleteMovieInput,
+} = require("../models/Movie");
 
 const getAllMovies = async (req, res) => {
   try {
+    const cachKey = "movies";
+
+    // Check if movies are cached in Redis
+    //fetch movies from redis cache
+    const cachedMovies = await redisClient.get(cachKey);
+
+    if (cachedMovies) {
+      console.log("from Redis");
+      return res.status(200).json({
+        data: JSON.parse(cachedMovies),
+        message: "Movies retrieved successfully (from cache)",
+        status: "200 OK",
+      });
+    }
+    //fetch movies from database
     const movies = await db.movie.findMany();
+    await redisClient.set(cachKey, 60, JSON.stringify(movies)); // Cache movies in Redis for 60 seconds
+    console.log("from database");
     return res.status(200).json({
-      message: "Movies retrieved successfully",
+      message: "Movies retrieved successfully from database",
       status: "200 OK",
       data: movies,
     });

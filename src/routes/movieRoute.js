@@ -11,13 +11,13 @@ const {
 
 const { authMiddleware } = require("../middleware/authMiddleware");
 //Movie apis
-router.get("/idexMovies", getAllMovies);
-router.get("/idexMovies/:id", getMovieById);
+router.get("/indexMovies", getAllMovies);
+router.get("/indexMovies/:id", getMovieById);
 //Middleware to protect routes that require authentication
 router.use(authMiddleware);
-router.post("/idexMovies", addMovie);
-router.put("/idexMovies/:id", updateMovie);
-router.delete("/idexMovies/:id", deleteMovie);
+router.post("/addMovies", addMovie);
+router.put("/updateMovies/:id", updateMovie);
+router.delete("/deleteMovies/:id", deleteMovie);
 
 module.exports = {
   router,
