@@ -2,7 +2,7 @@ const express = require("express");
 const { db } = require("../config/DB.js");
 const bcrypt = require("bcryptjs");
 const { generateToken } = require("../utlis/generateToken.js");
-
+const { validateUserRegistration, validateUserLogin } = require("../models/User.js");
 const registerUser = async (req, res) => {
   const { name, email, password } = req.body;
 

@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  # 1. خدمة قاعدة البيانات
+  db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: omartest
+      POSTGRES_DB: movie_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    networks:
+      - movie_net
+
+  # 2. خدمة الكاش والطوابير
+  redis:
+    image: redis:7-alpine
+    restart: always
+    ports:
+      - "6379:6379"
+    networks:
+      - movie_net
+
+  # 3. خدمة واجهة برمجة التطبيقات (تطبيق Node.js)
+  api:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - DATABASE_URL=postgresql://admin:omartest@db:5432/movie_db
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=my_secure_jwt_key
+    depends_on:
+      - db
+      - redis
+    command: sh -c "npx prisma db push && npm start"
+    networks:
+      - movie_net
+
+# ----------------------------------------------------
+# الشبكات ووحدات التخزين
+# ----------------------------------------------------
+networks:
+  movie_net:
+    driver: bridge
+
+volumes:
+  pg_data:
