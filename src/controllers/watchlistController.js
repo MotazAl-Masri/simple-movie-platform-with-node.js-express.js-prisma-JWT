@@ -58,7 +58,7 @@ const addToWatchlist = async (req, res) => {
 
   const movie = await db.movie.findUnique({
     where: {
-      id: movieId,
+      id: Number(movieId),
     },
   });
   const { error } = validateAddToWatchlistItemInput(req.body);
@@ -77,7 +77,7 @@ const addToWatchlist = async (req, res) => {
   const existingInWatchlist = await db.watchlistItem.findFirst({
     where: {
       userId: req.user.id,
-      movieId: movieId,
+      movieId: Number(movieId),
     },
   });
   if (existingInWatchlist) {
@@ -96,6 +96,7 @@ const addToWatchlist = async (req, res) => {
     },
   });
   await redisClient.del(`watchlist:${req.user.id}`);
+
   res.status(201).json({
     message: "Movie added to watchlist",
     watchlistItem,

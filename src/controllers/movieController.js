@@ -15,8 +15,9 @@ const getAllMovies = async (req, res) => {
 
     // Check if movies are cached in Redis
     //fetch movies from redis cache
+    console.log("before redis");
     const cachedMovies = await redisClient.get(cachKey);
-
+    console.log("after redis");
     if (cachedMovies) {
       const parsedMovies = JSON.parse(cachedMovies);
       console.log("from Redis");

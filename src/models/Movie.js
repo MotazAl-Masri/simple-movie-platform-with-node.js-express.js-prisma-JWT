@@ -13,12 +13,7 @@ const validateAddNewMovieInput = (obj) => {
     runtime: joi.number().integer().min(1).required(),
     posterUrl: joi.string().uri().optional(),
     directorId: joi.number().integer().required(),
-    releaseYear: joi
-      .number()
-      .integer()
-      .min(1888)
-      .max(new Date().getFullYear())
-      .required(),
+    releaseYear: joi.number().integer().min(1888).max(2026).required(),
     rating: joi.number().min(0).max(10).optional(),
     anotherTitles: joi.array().items(joi.string()).optional(),
   });

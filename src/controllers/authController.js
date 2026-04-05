@@ -2,7 +2,14 @@ const express = require("express");
 const { db } = require("../config/DB.js");
 const bcrypt = require("bcryptjs");
 const { generateToken } = require("../utlis/generateToken.js");
-const { validateUserRegistration, validateUserLogin } = require("../models/User.js");
+const notificationQueue =
+  require("../queues/notificationQueue.js").notificationQueue;
+
+const {
+  validateUserRegistration,
+  validateUserLogin,
+} = require("../models/User.js");
+
 const registerUser = async (req, res) => {
   const { name, email, password } = req.body;
 
@@ -39,6 +46,13 @@ const registerUser = async (req, res) => {
     },
   });
   const token = generateToken(newUser.id, res);
+
+  await notificationQueue.add("sendNotification", {
+    userId: newUser.id,
+    email: newUser.email,
+    message: "Welcome to our platform! Your registration was successful.",
+  });
+
   //Return the new user
   return res.status(201).json({
     message: "User registered successfully",

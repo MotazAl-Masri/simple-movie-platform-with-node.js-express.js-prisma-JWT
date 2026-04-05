@@ -1,88 +1,114 @@
 const express = require("express");
-//const xss = require("xss-clean");
-const ratinglimit = require("express-rate-limit");
-//const helmet = require("helmet");
-//const hpp = require("hpp");
-const { connectRedis } = require("./src/config/redis.js");
-
-//dotenv for environment variables
 const dotenv = require("dotenv");
+const ratinglimit = require("express-rate-limit");
 
-//error handler middleware
+dotenv.config();
+
+// استيراد إعدادات الاتصال
+const { connectDB, disconnectDB } = require("./src/config/DB");
+const { connectRedis, redisClient } = require("./src/config/redis.js");
+
+// استيراد الميدل وير والروتر
 const { notFound, errorHandler } = require("./src/middleware/errors");
-
-//import routes
 const movieRouter = require("./src/routes/movieRoute").router;
 const authRouter = require("./src/routes/authRoutes").router;
 const watchlistRouter = require("./src/routes/watchlistRoute").router;
 const redisRoute = require("./src/routes/redisRoute.js");
 
-const { connectDB, disconnectDB } = require("./src/config/DB");
+// إعداد بيئة العمل
 
-dotenv.config();
-//connect to database
-connectDB();
-//connect to redis
-connectRedis();
-//init app
 const app = express();
-
 const PORT = process.env.PORT || 3000;
-//Body parsing middleware
+
+// 1. Middlewares
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-//security middleware to set various HTTP headers for protection against common vulnerabilities
-//app.use(helmet());
 
-//prevent HTTP parameter pollution attacks
-//app.use(hpp());
-//Data sanitization against XSS attacks
-//app.use(xss());
-//Rate limiting middleware to prevent brute-force attacks
-app.use(
-  ratinglimit({
-    windowMs: 10 * 60 * 1000, // 10 minutes
-    max: 20, // limit each IP to 20 requests per windowMs
-    message:
-      "Too many requests from this IP, please try again after 10 minutes",
-  }),
-);
-// apis
+// Rate limiting - تم رفعه قليلاً لسهولة الاختبار في التطوير
+const limiter = ratinglimit({
+  windowMs: 10 * 60 * 1000, // 10 دقائق
+  max: 100, // مسموح بـ 100 طلب بدل 20 لتجنب الحظر الذاتي أثناء التست
+  message: "Too many requests from this IP, please try again after 10 minutes",
+});
+app.use(limiter);
 
+// 2. Routes
 app.use("/api/movies", movieRouter);
 app.use("/api/auth", authRouter);
 app.use("/api/watchlist", watchlistRouter);
 app.use("/api/redis", redisRoute);
 
-// error handling middleware
+// 3. Error Handling (يجب أن تكون بعد الروتس)
 app.use(notFound);
 app.use(errorHandler);
 
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-});
+// --- وظيفة تشغيل السيرفر الاحترافية ---
+let server; // تعريف متغير السيرفر للوصول إليه في الـ Shutdown
 
-process.on("unhandledRejection", (err) => {
-  console.error("Unhandled Rejection:", err);
-  Server.close(async () => {
-    await disconnectDB();
+const startServer = async () => {
+  try {
+    console.log("⏳ Starting services...");
+
+    // أولوية الاتصال لقاعدة البيانات
+    await connectDB();
+    console.log("✅ Database Connected");
+
+    // الاتصال بـ Redis وانتظاره
+    await connectRedis();
+    // تأكد أن دالة connectRedis ترجع Promise (عن طريق await redisClient.connect())
+
+    server = app.listen(PORT, () => {
+      console.log(
+        `🚀 Server is running on port ${PORT} in ${process.env.NODE_ENV || "development"} mode`,
+      );
+    });
+  } catch (error) {
+    console.error("❌ Critical Failure: Could not start server", error);
     process.exit(1);
-  });
+  }
+};
+
+// تشغيل السيرفر
+startServer();
+
+// --- التعامل مع الإغلاق النظيف (Graceful Shutdown) ---
+const gracefulShutdown = async (signal) => {
+  console.log(`\n[${signal}] Received. Closing HTTP server...`);
+
+  if (server) {
+    server.close(async () => {
+      console.log("HTTP server closed.");
+
+      try {
+        // إغلاق اتصالات قواعد البيانات
+        await disconnectDB();
+        if (redisClient.isOpen) {
+          await redisClient.quit();
+          console.log("Redis connection closed.");
+        }
+        console.log("Cleanup finished. Exiting safely.");
+        process.exit(0);
+      } catch (err) {
+        console.error("Error during cleanup:", err);
+        process.exit(1);
+      }
+    });
+  } else {
+    process.exit(0);
+  }
+};
+
+// الاستماع لإشارات نظام التشغيل لإغلاق السيرفر
+process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+
+// التعامل مع الأخطاء غير المتوقعة التي لا يمسكها الـ Catch
+process.on("unhandledRejection", (err) => {
+  console.error("🚨 Unhandled Rejection:", err);
+  // نترك السيرفر شغالاً أو نغلقه حسب سياسة الـ Availability لديك
 });
 
 process.on("uncaughtException", (err) => {
-  console.error("Uncaught Exception:", err);
-  Server.close(async () => {
-    await disconnectDB();
-    process.exit(1);
-  });
-});
-
-// Handle graceful shutdown
-process.on("SIGTERM", async () => {
-  console.log("SIGTERM received. Shutting down gracefully...");
-  server.close(async () => {
-    await disconnectDB();
-    process.exit(0);
-  });
+  console.error("🚨 Uncaught Exception:", err);
+  gracefulShutdown("Uncaught Exception");
 });
