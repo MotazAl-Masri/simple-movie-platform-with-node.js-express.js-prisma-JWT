@@ -61,13 +61,7 @@ const addToWatchlist = async (req, res) => {
       id: Number(movieId),
     },
   });
-  const { error } = validateAddToWatchlistItemInput(req.body);
-  if (error) {
-    return res.status(400).json({
-      message: "Validation error",
-      details: error.details.map((detail) => detail.message),
-    });
-  }
+
   if (!movie) {
     return res.status(404).json({
       message: "Movie not found",
@@ -112,13 +106,7 @@ const updateWatchlistItem = async (req, res) => {
   const watchlistItem = await db.watchlistItem.findUnique({
     where: { id },
   });
-  const { error } = validateUpdateWatchlistItemInput(req.body);
-  if (error) {
-    return res.status(400).json({
-      message: "Validation error",
-      details: error.details.map((detail) => detail.message),
-    });
-  }
+
   if (!watchlistItem) {
     return res.status(404).json({ error: "Watchlist item not found" });
   }

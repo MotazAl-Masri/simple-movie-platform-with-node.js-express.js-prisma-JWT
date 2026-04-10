@@ -1,38 +1,38 @@
-const joi = require("joi");
+const z = require("zod");
 
-const { PrismaClient } = require("../generated/prisma");
-
-const db = new PrismaClient();
-
-//validate WatchlistItem input for add and update
-const validateAddToWatchlistItemInput = (obj) => {
-  const schema = joi.object({
-    movieId: joi.number().integer().required(),
-    status: joi
-      .string()
-      .valid("PLANNED", "WATCHING", "COMPLETED", "DROPPED")
-      .required(),
-    notes: joi.string().max(1000).optional(),
-    rating: joi.number().min(0).max(10).optional(),
-  });
-  return schema.validate(obj, { abortEarly: false });
-};
-
-const validateUpdateWatchlistItemInput = (obj) => {
-  const schema = joi
-    .object({
-      status: joi
-        .string()
-        .valid("PLANNED", "WATCHING", "COMPLETED", "DROPPED")
-        .optional(),
-      notes: joi.string().max(1000).optional(),
-      rating: joi.number().min(0).max(10).optional(),
+const addToWatchlistItemSchema = z.object({
+  movieId: z.number().int().positive(),
+  status: z
+    .enum(["PLANNED", "WATCHING", "COMPLETED", "DROPPED"], {
+      error: () => ({
+        message: "Status must be one of: PLANNED, WATCHING, COMPLETED, DROPPED",
+      }),
     })
-    .or("status", "notes", "rating"); // At least one of these fields must be provided
-  return schema.validate(obj, { abortEarly: false });
-};
+    .optional(),
+  rating: z.coerce
+    .number()
+    .int("rating must be an integer")
+    .min(1, "rating must be at least 1")
+    .max(10, "rating must be at most 10")
+    .optional(),
+  notes: z.string().max(500, "notes must be at most 500 characters").optional(),
+});
 
-module.exports = {
-  validateAddToWatchlistItemInput,
-  validateUpdateWatchlistItemInput,
-};
+const updateWatchlistItemSchema = z.object({
+  status: z
+    .enum(["PLANNED", "WATCHING", "COMPLETED", "DROPPED"], {
+      error: () => ({
+        message: "Status must be one of: PLANNED, WATCHING, COMPLETED, DROPPED",
+      }),
+    })
+    .optional(),
+  rating: z.coerce
+    .number()
+    .int("rating must be an integer")
+    .min(1, "rating must be at least 1")
+    .max(10, "rating must be at most 10")
+    .optional(),
+  notes: z.string().max(500, "notes must be at most 500 characters").optional(),
+});
+
+module.exports = { addToWatchlistItemSchema, updateWatchlistItemSchema };

@@ -1,53 +1,48 @@
-const joi = require("joi");
+const z = require("zod");
 
-const { PrismaClient } = require("../generated/prisma");
+const AddMovieSchema = z.object({
+  title: z.string().min(1, "Title is required"),
+  releaseYear: z
+    .number()
+    .int("Release year must be an integer")
+    .min(1888, "Release year must be 1888 or later")
+    .max(new Date().getFullYear(), "Release year cannot be in the future"),
+  genres: z
+    .array(z.string())
+    .min(1, "At least one genre is required")
+    .optional()
+    .default([]),
+  overview: z.string().optional(),
+  runtime: z.number().int("Runtime must be an integer").optional(),
+  posterUrl: z.string().url("Poster URL must be a valid URL").optional(),
+  anotherTitles: z.array(z.string()).optional().default([]),
+  rating: z.coerce
+    .number()
+    .int("Rating must be an integer")
+    .min(0, "Rating must be a positive number")
+    .max(10, "Rating must be a number between 0 and 10")
+    .optional(),
+});
 
-const db = new PrismaClient();
+const UpdateMovieSchema = z.object({
+  title: z.string().min(1, "Title is required").optional(),
+  releaseYear: z
+    .number()
+    .int("Release year must be an integer")
+    .min(1888, "Release year must be 1888 or later")
+    .max(new Date().getFullYear(), "Release year cannot be in the future")
+    .optional(),
+  genre: z.string().optional(),
+  overview: z.string().optional(),
+  runtime: z.number().int("Runtime must be an integer").optional(),
+  posterUrl: z.string().url("Poster URL must be a valid URL").optional(),
+  anotherTitles: z.string().optional(),
+  rating: z.coerce
+    .number()
+    .int("Rating must be an integer")
+    .min(0, "Rating must be a positive number")
+    .max(10, "Rating must be a number between 0 and 10")
+    .optional(),
+});
 
-//validate movie input for registration and login
-const validateAddNewMovieInput = (obj) => {
-  const schema = joi.object({
-    title: joi.string().min(1).max(255).required(),
-    overview: joi.string().min(1).optional(),
-    genres: joi.array().items(joi.string()).required(),
-    runtime: joi.number().integer().min(1).required(),
-    posterUrl: joi.string().uri().optional(),
-    directorId: joi.number().integer().required(),
-    releaseYear: joi.number().integer().min(1888).max(2026).required(),
-    rating: joi.number().min(0).max(10).optional(),
-    anotherTitles: joi.array().items(joi.string()).optional(),
-  });
-  return schema.validate(obj, { abortEarly: false });
-};
-
-const validateUpdateMovieInput = (obj) => {
-  const schema = joi.object({
-    title: joi.string().min(1).max(255).optional(),
-    overview: joi.string().min(1).optional(),
-    genres: joi.array().items(joi.string()).optional(),
-    runtime: joi.number().integer().min(1).optional(),
-    posterUrl: joi.string().uri().optional(),
-    directorId: joi.number().integer().optional(),
-    releaseYear: joi
-      .number()
-      .integer()
-      .min(1888)
-      .max(new Date().getFullYear())
-      .optional(),
-    rating: joi.number().min(0).max(10).optional(),
-    anotherTitles: joi.array().items(joi.string()).optional(),
-  });
-  return schema.validate(obj, { abortEarly: false });
-};
-
-const validateDeleteMovieInput = (obj) => {
-  const schema = joi.object({
-    id: joi.number().integer().required(),
-  });
-  return schema.validate(obj, { abortEarly: false });
-};
-
-module.exports = {
-  validateAddNewMovieInput,
-  validateUpdateMovieInput,
-};
+module.exports = { AddMovieSchema, UpdateMovieSchema };

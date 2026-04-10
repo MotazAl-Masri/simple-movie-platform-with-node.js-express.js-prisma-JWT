@@ -1,59 +1,64 @@
 version: "3.8"
 
 services:
+  # 1. قاعدة البيانات
   db:
     image: postgres:15-alpine
     restart: always
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: movieDB
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: omartest
+      POSTGRES_DB: movie_db
     ports:
       - "5432:5432"
     volumes:
       - pg_data:/var/lib/postgresql/data
     networks:
-      - app_net
+      - movie_net
 
+  # 2. Redis للكاش ولـ BullMQ
   redis:
     image: redis:7-alpine
     restart: always
     ports:
       - "6379:6379"
     networks:
-      - app_net
+      - movie_net
 
+  # 3. خدمة الـ API (المسؤولة عن استقبال الطلبات فقط)
   api:
     build: .
-    restart: always
     ports:
       - "3000:3000"
     environment:
-      - DATABASE_URL=postgresql://postgres:postgres@db:5432/movieDB
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - JWT_SECRET=supersecretkey
-    env_file:
-      - .env
+      - DATABASE_URL=postgresql://admin:omartest@db:5432/movie_db
+      - REDIS_URL=redis://redis:6379
+      - NODE_ENV=development
     depends_on:
       - db
       - redis
-    command: sh -c "npx prisma db push && npm start"
+    command: sh -c "npx prisma db push && npm run seed:movies && npm start"
     networks:
-      - app_net
+      - movie_net
 
+  # 4. خدمة الـ Worker (المسؤولة عن معالجة المهام خلف الكواليس)
   worker:
     build: .
-    command: node src/workers/notificationWorker.js
-    env_file:
-      - .env
+    environment:
+      - DATABASE_URL=postgresql://admin:omartest@db:5432/movie_db
+      - REDIS_URL=redis://redis:6379
+      - NODE_ENV=development
     depends_on:
+      - db
       - redis
+    # هنا نفترض أنك أضفت سكريبت في package.json لتشغيل الـ worker فقط
+    restart: on-failure
+    command: npm run worker
     networks:
-      - app_net
+      - movie_net
 
 networks:
-  app_net:
+  movie_net:
     driver: bridge
 
 volumes:

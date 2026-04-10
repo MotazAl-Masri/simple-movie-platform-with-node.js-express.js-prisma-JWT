@@ -1,47 +1,41 @@
-const bcrypt = require("../../node_modules/bcryptjs");
 const { db } = require("../config/DB.js");
-const { prismaClient } = require("../generated/prisma");
 const { redisClient } = require("../config/redis.js");
+const { notificationQueue } = require("../queues/notificationQueue");
 
-const {
-  validateAddNewMovieInput,
-  validateUpdateMovieInput,
-  validateDeleteMovieInput,
-} = require("../models/Movie");
-
+// ================= GET ALL MOVIES =================
+// ميزة: جلب من الكاش أولاً لتخفيف الضغط عن PostgreSQL
 const getAllMovies = async (req, res) => {
   try {
-    const cachKey = "movies";
+    const cacheKey = "movies";
 
-    // Check if movies are cached in Redis
-    //fetch movies from redis cache
-    console.log("before redis");
-    const cachedMovies = await redisClient.get(cachKey);
-    console.log("after redis");
+    // محاولة جلب البيانات من Redis
+    const cachedMovies = await redisClient.get(cacheKey);
+
     if (cachedMovies) {
-      const parsedMovies = JSON.parse(cachedMovies);
-      console.log("from Redis");
-
+      console.log(" Serving from Redis Cache");
       return res.status(200).json({
-        data: parsedMovies,
+        data: JSON.parse(cachedMovies),
         message: "Movies retrieved successfully (from cache)",
         status: "200 OK",
       });
     }
 
-    const movies = await db.movie.findMany();
+    // إذا لم تكن موجودة، نجلبها من قاعدة البيانات
+    const movies = await db.movie.findMany({
+      orderBy: { createdAt: "desc" },
+    });
 
-    await redisClient.setEx(cachKey, 60, JSON.stringify(movies));
+    // تخزين النتائج في Redis لمدة 60 ثانية
+    await redisClient.setEx(cacheKey, 60, JSON.stringify(movies));
 
-    console.log("from database");
-
+    console.log(" Serving from Database");
     return res.status(200).json({
       data: movies,
       message: "Movies retrieved successfully from database",
       status: "200 OK",
     });
   } catch (error) {
-    console.error("Error retrieving movies:", error);
+    console.error(" Error retrieving movies:", error);
     return res.status(500).json({
       message: "An error occurred while retrieving movies",
       status: "500 Internal Server Error",
@@ -49,164 +43,114 @@ const getAllMovies = async (req, res) => {
   }
 };
 
+// ================= GET MOVIE BY ID =================
 const getMovieById = async (req, res) => {
-  const { id } = req.params;
+  const id = Number(req.params.id);
   try {
-    const cachKey = `movie:${id}`;
+    const cacheKey = `movie:${id}`;
 
-    // Check if movie is cached in Redis
-    const cachedMovie = await redisClient.get(cachKey);
+    const cachedMovie = await redisClient.get(cacheKey);
 
     if (cachedMovie) {
-      const paresedMovie = JSON.parse(cachedMovie);
-      console.log("from redis");
       return res.status(200).json({
-        data: paresedMovie,
+        data: JSON.parse(cachedMovie),
         message: "Movie retrieved successfully (from cache)",
         status: "200 OK",
       });
     }
 
     const movie = await db.movie.findUnique({
-      where: {
-        id: parseInt(id),
-      },
+      where: { id },
     });
+
     if (!movie) {
       return res.status(404).json({
         message: "Movie not found",
         status: "404 Not Found",
       });
     }
-    await redisClient.setEx(cachKey, 60, JSON.stringify(movie));
-    console.log("from database");
+
+    await redisClient.setEx(cacheKey, 60, JSON.stringify(movie));
+
     return res.status(200).json({
+      data: movie,
       message: "Movie retrieved successfully from database",
       status: "200 OK",
-      data: movie,
     });
   } catch (error) {
-    console.error("Error retrieving movie:", error);
-    return res.status(500).json({
-      message: "An error occurred while retrieving the movie",
-      status: "500 Internal Server Error",
-    });
+    return res.status(500).json({ message: "Error retrieving the movie" });
   }
 };
 
+// ================= ADD MOVIE =================
 const addMovie = async (req, res) => {
-  const {
-    title,
-    overview,
-    releaseyear,
-    genres,
-    runtime,
-    posterUrl,
-    anotherTitles,
-    directorId,
-    rating,
-  } = req.body;
-  const error = validateAddNewMovieInput({
-    title,
-    overview,
-    releaseyear,
-    genres,
-    runtime,
-    posterUrl,
-    anotherTitles,
-    directorId,
-    rating,
-  }).error;
-  if (error) {
-    return res.status(400).json({
-      message: error.details[0].message,
-      status: "400 Bad Request",
-    });
-  }
-  const salt = await bcrypt.genSalt(10);
-  const hashedUrl = await bcrypt.hash(posterUrl, salt);
   try {
+    // 1. استخراج البيانات (تم التحقق منها مسبقاً عبر Zod middleware)
+    const {
+      title,
+      overview,
+      releaseYear,
+      genres,
+      runtime,
+      posterUrl,
+      anotherTitles,
+      rating,
+    } = req.body;
+
+    // 2. سحب المعرف من التوكن لضمان الأمان
+    const DirectorId = req.user.id;
+
+    // 3. إنشاء السجل في قاعدة البيانات
     const newMovie = await db.movie.create({
       data: {
         title: title,
         overview: overview,
-        releaseYear: releaseyear,
-        genres: genres,
+        releaseYear: releaseYear,
+        genres: genres || [],
         runtime: runtime,
-        posterUrl: hashedUrl,
-        anotherTitles: anotherTitles,
-        directorId: directorId,
+        posterUrl: posterUrl, // لا نقوم بتشفير الروابط بـ bcrypt أبداً
+        anotherTitles: anotherTitles || [],
+        directorId: DirectorId,
         rating: rating,
       },
     });
 
+    // 4. 🔥 إبطال الكاش القديم (Cache Invalidation)
     await redisClient.del("movies");
 
+    // 5. 🚀 إضافة مهمة لـ BullMQ لإرسال إشعارات أو معالجة صور خلف الكواليس
+    await notificationQueue.add("process-movie-image", {
+      movieId: newMovie.id,
+      title: newMovie.title,
+      posterUrl: newMovie.posterUrl,
+      addedBy: req.user.username,
+    });
+
     return res.status(201).json({
-      message: "Movie added successfully",
+      message: "Movie added and processing job queued!",
       status: "201 Created",
       data: newMovie,
     });
   } catch (error) {
-    console.error("Error adding movie:", error);
+    console.error(" Error adding movie:", error);
     return res.status(500).json({
-      message: "An error occurred while adding the movie",
+      message: error.message,
       status: "500 Internal Server Error",
     });
   }
 };
 
+// ================= UPDATE MOVIE =================
 const updateMovie = async (req, res) => {
-  const { id } = req.params;
-  const {
-    title,
-    overview,
-    releaseyear,
-    genres,
-    runtime,
-    posterUrl,
-    anotherTitles,
-    directorId,
-    rating,
-  } = req.body;
-  const error = validateUpdateMovieInput({
-    title,
-    overview,
-    releaseyear,
-    genres,
-    runtime,
-    posterUrl,
-    anotherTitles,
-    directorId,
-    rating,
-  }).error;
-  if (error) {
-    return res.status(400).json({
-      message: error.details[0].message,
-      status: "400 Bad Request",
-    });
-  }
-
-  const salt = await bcrypt.genSalt(10);
-  const hashedUrl = await bcrypt.hash(posterUrl, salt);
+  const id = Number(req.params.id);
   try {
+    // تحديث البيانات مع الحفاظ على directorId الأصلي
     const updatedMovie = await db.movie.update({
-      where: {
-        id: parseInt(id),
-      },
-      data: {
-        title: title,
-        overview: overview,
-        releaseYear: releaseyear,
-        genres: genres,
-        runtime: runtime,
-        posterUrl: hashedUrl,
-        anotherTitles: anotherTitles,
-        directorId: directorId,
-        rating: rating,
-      },
+      where: { id },
+      data: req.body,
     });
 
+    // إبطال الكاش لهذا الفيلم وللقائمة الكاملة
     await redisClient.del(`movie:${id}`);
     await redisClient.del("movies");
 
@@ -216,28 +160,18 @@ const updateMovie = async (req, res) => {
       data: updatedMovie,
     });
   } catch (error) {
-    console.error("Error updating movie:", error);
-    return res.status(500).json({
-      message: "An error occurred while updating the movie",
-      status: "500 Internal Server Error",
-    });
+    return res
+      .status(500)
+      .json({ message: "An error occurred while updating" });
   }
 };
 
+// ================= DELETE MOVIE =================
 const deleteMovie = async (req, res) => {
-  const { id } = req.params;
-  const error = validateDeleteMovieInput({ id }).error;
+  const id = Number(req.params.id);
   try {
-    if (error) {
-      return res.status(400).json({
-        message: error.details[0].message,
-        status: "400 Bad Request",
-      });
-    }
     await db.movie.delete({
-      where: {
-        id: parseInt(id),
-      },
+      where: { id },
     });
 
     await redisClient.del(`movie:${id}`);
@@ -248,11 +182,9 @@ const deleteMovie = async (req, res) => {
       status: "200 OK",
     });
   } catch (error) {
-    console.error("Error validating input:", error);
-    return res.status(500).json({
-      message: "An error occurred while validating input",
-      status: "500 Internal Server Error",
-    });
+    return res
+      .status(500)
+      .json({ message: "An error occurred while deleting" });
   }
 };
 

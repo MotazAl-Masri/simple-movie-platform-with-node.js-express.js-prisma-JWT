@@ -1,13 +1,12 @@
 const { Queue } = require("bullmq");
 
-const notificationQueue = new Queue("notificationQueue", {
-  connection: {
-    host: process.env.REDIS_HOST,
-    port: process.env.REDIS_PORT,
-    maxRetriesPerRequest: null,
-  },
-});
-
-module.exports = {
-  notificationQueue,
+// نصيحة: استخدم اسم الخدمة 'redis' مباشرة إذا كنت داخل Docker
+const connection = {
+  host: "redis", // ⚠️ تأكد أنها redis وليست localhost أو 127.0.0.1
+  port: 6379,
+  maxRetriesPerRequest: null,
 };
+
+const notificationQueue = new Queue("main-tasks", { connection });
+
+module.exports = { notificationQueue };

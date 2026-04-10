@@ -1,26 +1,14 @@
-const joi = require("joi");
-const { PrismaClient } = require("../generated/prisma");
-const db = new PrismaClient();
+const z = require("zod");
 
-//validate user input for registration and login
-const validateUserRegistration = (obj) => {
-  const schema = joi.object({
-    name: joi.string().min(3).max(30).required(),
-    email: joi.string().email().required(),
-    password: joi.string().min(6).required(),
-  });
-  return schema.validate(obj, { abortEarly: false });
-};
+const RegisterSchema = z.object({
+  name: z.string().min(3, "Username must be at least 3 characters"),
+  email: z.string().email("Invalid email address"),
+  password: z.string().min(6, "Password must be at least 6 characters"),
+});
 
-const validateUserLogin = (obj) => {
-  const schema = joi.object({
-    email: joi.string().email().required(),
-    password: joi.string().min(6).required(),
-  });
-  return schema.validate(obj, { abortEarly: false });
-};
+const LoginSchema = z.object({
+  email: z.string().email("Invalid email address"),
+  password: z.string().min(6, "Password must be at least 6 characters"),
+});
 
-module.exports = {
-  validateUserRegistration,
-  validateUserLogin,
-};
+module.exports = { RegisterSchema, LoginSchema };

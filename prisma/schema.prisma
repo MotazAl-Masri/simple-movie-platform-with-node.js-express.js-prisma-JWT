@@ -36,8 +36,8 @@ model Movie {
   runtime     Int?
   posterUrl   String?
   anotherTitles String[] @default([])
-  directorId  Int      
-  releaseYear Int
+  directorId  Int    
+  releaseYear Int?
   rating      Float?
   createdAt   DateTime @default(now())
 
